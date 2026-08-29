@@ -1,32 +1,37 @@
-# Befalap Radar – dashboard repo
+# Befalap Radar – dashboard v2
 
-Statikus GitHub Pages frontend, közvetlen read-only Supabase REST lekérdezésekkel.
+Statikus GitHub Pages frontend a Befalap Supabase production adatmodellhez.
 
-## Nézetek
+## Production adatmodell
 
-### Screener
-- ACWI IMI / S&P 500 / STOXX Europe 600 / BUX benchmarkváltó;
-- 1Y / 3Y / 5Y rolling horizont;
-- Beat Rate × Median Excess piac-térkép, AUM buborékmérettel;
-- alapkezelő, kategória, deviza, minimum rolling ablak és szöveges szűrés;
-- rendezés Beat Rate, Mean/Median Excess, aktuális excess, Longest Relative Underperformance, Max Passive Regret, Max Drawdown, duration, Sharpe, Sortino szerint.
+A frontend kizárólag a jelenlegi compact táblákat/view-kat használja:
 
-### Alap-adatlap
-- 1Y/3Y/5Y/10Y HUF hozam;
-- benchmark-relative scorecard;
-- fund vs benchmark HUF wealth chart;
-- rolling fund-return és excess-return eloszlás;
-- rolling excess idővonal;
-- napi relatív drawdown / passive regret;
-- klasszikus kockázati mutatók;
-- 4 benchmark × 3 horizont összefoglaló mátrix;
-- BAMOSZ törzsadatok.
+- `v_screener_base`
+- `benchmarks`
+- `relative_summary`
+- `relative_path_summary`
+- `fund_metrics`
+- `fund_screen_status`
+- `fund_rolling_series`
+- `relative_rolling_series`
+- `fund_daily`
+- `benchmark_daily`
+- `fx_daily`
 
-## Deploy
+Nincs hivatkozás a régi `fund_rolling_returns`, `relative_rolling` vagy `wealth_index_huf` mezőkre.
 
-GitHub repository secrets:
+## GitHub Actions beállítás
 
+Repository variable:
 - `SUPABASE_URL`
-- `SUPABASE_ANON_KEY` (Supabase publishable/anon read-only key)
 
-A `pages.yml` deploykor generálja a `config.js` fájlt. Service-role kulcs nem kerül a frontendbe.
+Repository secret:
+- `SUPABASE_PUBLISHABLE_KEY` (ajánlott; legacy fallbackként a workflow még elfogadja a `SUPABASE_ANON_KEY` nevet is)
+
+A `pages.yml` deploykor készíti el a böngészőben szükséges `config.js` fájlt. Service-role kulcsot soha ne használj a dashboardban.
+
+## Frissítési logika
+
+- raw/current adatok: napi incremental data pipeline;
+- rolling/path analytics: havi reconciliation;
+- a dashboard a Supabase read-only REST API-ját használja, ezért külön dashboard build nem kell minden adatfrissítés után.
