@@ -15,7 +15,7 @@
   }
   function heading(){
     const f=S.f,m=S.m,st=S.status?.screen_status||'active';
-    E('heading').innerHTML=`<div class="eyebrow">ALAP ADATLAP</div><h1>${A.esc(f.fund_name||f.series_name||f.isin)}</h1><div class="meta-line"><span>${A.esc(f.manager||'—')}</span><span>${A.esc(f.category||'—')}</span><span>${A.esc(f.currency||'—')} → HUF</span><span>${A.esc(f.isin)}</span><span class="${A.statusClass(st)}">${A.statusLabel(st)}</span></div>`;
+    E('heading').innerHTML=`<div class="eyebrow">ALAP ADATLAP</div><h1>${A.esc(f.fund_name||f.series_name||f.isin)}</h1><div class="meta-line">${f.series_name?`<span>${A.esc(f.series_name)}</span>`:''}<span>${A.esc(f.isin)}</span><span>${A.esc(f.manager||'—')}</span><span>${A.esc(f.category||'—')}</span><span>${A.esc(f.currency||'—')} → HUF</span><span class="${A.statusClass(st)}">${A.statusLabel(st)}</span></div>`;
     E('returns').innerHTML=[['1Y',m?.return_1y],['3Y CAGR',m?.cagr_3y],['5Y CAGR',m?.cagr_5y],['10Y CAGR',m?.cagr_10y]].map(x=>`<div class="kpi"><span>${x[0]}</span><strong class="${A.cls(x[1])}">${A.pct(x[1])}</strong><small>HUF total return</small></div>`).join('');
     E('liveNote').textContent=`Legutóbbi alapadat: ${A.date(m?.obs_date||S.status?.last_obs_date)} · rolling analytics havi frissítéssel`;
   }

@@ -24,8 +24,8 @@
     let rows=S.base.map(x=>({...x,...sm.get(String(x.fund_id)),...pm.get(String(x.fund_id))}));
     rows=rows.filter(x=>showAll||x.screen_status==='active');
     rows=rows.filter(x=>(x.observations||0)>=minObs);
-    if(q) rows=rows.filter(x=>[x.fund_name,x.series_name,x.isin,x.manager,x.category].some(v=>String(v||'').toLowerCase().includes(q)));
-    for(const [id,key] of [['manager','manager'],['category','category'],['currency','currency']]) if(E(id).value) rows=rows.filter(x=>x[key]===E(id).value);
+    if(q) rows=rows.filter(x=>[x.fund_name,x.series_name,x.isin,x.manager,x.category,x.currency,x.risk_class].some(v=>String(v||'').toLowerCase().includes(q)));
+    for(const [id,key] of [['manager','manager'],['category','category'],['currency','currency'],['risk','risk_class']]) if(E(id).value) rows=rows.filter(x=>String(x[key]??'')===E(id).value);
     rows.sort((a,b)=>{
       const x=a[S.sort],y=b[S.sort];
       if(x===null||x===undefined)return 1;if(y===null||y===undefined)return-1;
@@ -42,8 +42,9 @@
   }
   function rowHtml(x){
     const status=x.screen_status||'active';
+    const sub=[x.series_name,x.isin,x.manager].filter(Boolean).join(' · ');
     return `<tr class="${status==='active'?'':'inactive-row'}">
-      <td><a class="fund" href="fund.html?id=${x.fund_id}&benchmark=${S.code}&h=${S.h}">${A.esc(x.fund_name||x.series_name||x.isin)}</a><div class="sub">${A.esc(x.isin)} · ${A.esc(x.manager||'—')}</div><span class="${A.statusClass(status)}">${A.statusLabel(status)}</span></td>
+      <td><a class="fund" href="fund.html?id=${x.fund_id}&benchmark=${S.code}&h=${S.h}">${A.esc(x.fund_name||x.series_name||x.isin)}</a><div class="sub">${A.esc(sub||x.isin||'—')}</div><span class="${A.statusClass(status)}">${A.statusLabel(status)}</span></td>
       <td><span class="pill">${A.esc(x.category||'—')}</span></td>
       <td class="num">${A.huf(x.net_assets_huf)}</td>
       <td class="num ${A.cls(x.beat_rate==null?null:+x.beat_rate-.5)}">${A.pct(x.beat_rate)}</td>
@@ -84,7 +85,7 @@
   function bind(){
     E('benchTabs').onclick=async e=>{const z=e.target.closest('button');if(!z)return;S.code=z.dataset.c;tabs();await loadRelative();render()};
     document.querySelectorAll('#hTabs button').forEach(z=>z.onclick=async()=>{S.h=+z.dataset.h;tabs();await loadRelative();render()});
-    ['search','manager','category','currency','obs','showInactive'].forEach(id=>E(id).addEventListener(id==='search'?'input':'change',render));
+    ['search','manager','category','currency','risk','obs','showInactive'].forEach(id=>E(id).addEventListener(id==='search'?'input':'change',render));
     document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{S.sort===th.dataset.s?S.dir*=-1:(S.sort=th.dataset.s,S.dir=['fund_name','category'].includes(S.sort)?1:-1);render()});
   }
 
@@ -94,7 +95,7 @@
       A.all('v_screener_base',{order:'fund_id.asc'})
     ]);
     if(!S.bench.some(x=>x.benchmark_code===S.code))S.code='ACWI_IMI';
-    fillOptions(E('manager'),S.base.map(x=>x.manager));fillOptions(E('category'),S.base.map(x=>x.category));fillOptions(E('currency'),S.base.map(x=>x.currency));
+    fillOptions(E('manager'),S.base.map(x=>x.manager));fillOptions(E('category'),S.base.map(x=>x.category));fillOptions(E('currency'),S.base.map(x=>x.currency));fillOptions(E('risk'),S.base.map(x=>x.risk_class));
     renderStatusSummary();tabs();await loadRelative();render();bind();
   }catch(e){console.error(e);E('err').innerHTML=`<div class="error"><b>Adatbetöltési hiba.</b><br>${A.esc(e.message)}</div>`}
 })();
