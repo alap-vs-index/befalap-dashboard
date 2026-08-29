@@ -1,0 +1,23 @@
+name: Test dashboard
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: JavaScript syntax
+        run: |
+          node --check js/common.js
+          node --check js/dashboard.js
+          node --check js/fund.js
+      - name: Guard against retired data model
+        run: |
+          ! grep -R "fund_rolling_returns\|relative_rolling[^_]\|wealth_index_huf" -n js || (echo "Retired dashboard data model reference found" && exit 1)
+          grep -q "fund_rolling_series" js/fund.js
+          grep -q "relative_rolling_series" js/fund.js
+          grep -q "screen_status" js/dashboard.js

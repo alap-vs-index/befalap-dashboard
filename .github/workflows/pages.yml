@@ -1,10 +1,19 @@
 name: Deploy dashboard
+
 on:
   push:
     branches: [main]
   workflow_dispatch:
-permissions: {contents: read, pages: write, id-token: write}
-concurrency: {group: pages, cancel-in-progress: true}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
   deploy:
     environment:
@@ -13,18 +22,37 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Generate public Supabase config
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+
+      - name: Validate frontend files
         run: |
-          test -n "$SUPABASE_URL" && test -n "$SUPABASE_ANON_KEY"
+          node --check js/common.js
+          node --check js/dashboard.js
+          node --check js/fund.js
+          test -f index.html && test -f fund.html && test -f methodology.html && test -f styles.css
+
+      - name: Build static site
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL || secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY || secrets.SUPABASE_ANON_KEY }}
+        run: |
+          test -n "$SUPABASE_URL" || (echo "Missing SUPABASE_URL repository variable/secret" && exit 1)
+          test -n "$SUPABASE_KEY" || (echo "Missing SUPABASE_PUBLISHABLE_KEY repository secret" && exit 1)
+          rm -rf _site
+          mkdir -p _site/js
+          cp index.html fund.html methodology.html styles.css _site/
+          cp js/*.js _site/js/
+          touch _site/.nojekyll
           python - <<'PY'
-          import os,json
-          open('config.js','w').write('window.APP_CONFIG='+json.dumps({'SUPABASE_URL':os.environ['SUPABASE_URL'],'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY']})+';\n')
+          import json,os
+          cfg={"SUPABASE_URL":os.environ["SUPABASE_URL"],"SUPABASE_KEY":os.environ["SUPABASE_KEY"]}
+          with open('_site/config.js','w',encoding='utf-8') as f:
+              f.write('window.APP_CONFIG='+json.dumps(cfg,separators=(',',':'))+';\n')
           PY
+
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
-        with: {path: .}
-      - id: deployment
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
         uses: actions/deploy-pages@v4
