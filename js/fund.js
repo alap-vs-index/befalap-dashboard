@@ -8,27 +8,61 @@
   const path=code=>{const b=S.b.find(x=>x.benchmark_code===code);return S.paths.find(x=>String(x.benchmark_id)===String(b?.benchmark_id))};
   const destroy=k=>S.charts[k]?.destroy();
 
-  function tabs(){E('benchTabs').innerHTML=S.b.map(x=>`<button data-c="${x.benchmark_code}" class="${x.benchmark_code===S.code?'active':''}">${short[x.benchmark_code]||A.esc(x.benchmark_code)}</button>`).join('');document.querySelectorAll('#hTabs button').forEach(x=>x.classList.toggle('active',+x.dataset.h===S.h))}
+  function tabs(){E('benchTabs').innerHTML=S.b.map(x=>`<button data-c="${x.benchmark_code}" class="${x.benchmark_code===S.code?'active':''}" title="${A.esc(x.name)}">${short[x.benchmark_code]||A.esc(x.benchmark_code)}</button>`).join('');document.querySelectorAll('#hTabs button').forEach(x=>x.classList.toggle('active',+x.dataset.h===S.h))}
   function metric(label,value,sub,type='pct'){
-    const fmt=type==='pct'?A.pct(value):type==='days'?A.days(value):type==='huf'?A.huf(value):type==='num'?A.num(value):A.esc(value??'—');
-    return `<div class="metric"><span>${label}</span><strong class="${type==='pct'?A.cls(value):''}">${fmt}</strong><small>${sub||''}</small></div>`;
+    const fmt=type==='pct'?A.pct(value):type==='pp'?A.pp(value):type==='days'?A.days(value):type==='huf'?A.huf(value):type==='num'?A.num(value):A.esc(value??'—');
+    return `<div class="metric"><span>${label}</span><strong class="${['pct','pp'].includes(type)?A.cls(value):''}">${fmt}</strong><small>${sub||''}</small></div>`;
+  }
+  function riskText(v){
+    const z=String(v??'').trim();
+    if(!z)return null;
+    return /^[1-7]$/.test(z)?`Kockázat: ${z}/7`:`Kockázat: ${z}`;
+  }
+  function signedHuf(v){
+    if(v===null||v===undefined||!Number.isFinite(+v))return '—';
+    return `${+v>0?'+':''}${A.huf(v)}`;
+  }
+  function durationLabel(start,end){
+    if(!start||!end)return '—';
+    const a=new Date(`${start}T12:00:00Z`),b=new Date(`${end}T12:00:00Z`);
+    if(Number.isNaN(+a)||Number.isNaN(+b)||b<a)return '—';
+    let months=(b.getUTCFullYear()-a.getUTCFullYear())*12+(b.getUTCMonth()-a.getUTCMonth());
+    if(b.getUTCDate()<a.getUTCDate())months=Math.max(0,months-1);
+    const years=Math.floor(months/12),rem=months%12,parts=[];
+    if(years)parts.push(`${years} év`);if(rem)parts.push(`${rem} hó`);
+    if(!parts.length){const days=Math.max(0,Math.round((b-a)/86400000));parts.push(`${days} nap`)}
+    return parts.join(' ');
   }
   function heading(){
-    const f=S.f,m=S.m,st=S.status?.screen_status||'active';
-    E('heading').innerHTML=`<div class="eyebrow">ALAP ADATLAP</div><h1>${A.esc(f.fund_name||f.series_name||f.isin)}</h1><div class="meta-line">${f.series_name?`<span>${A.esc(f.series_name)}</span>`:''}<span>${A.esc(f.isin)}</span><span>${A.esc(f.manager||'—')}</span><span>${A.esc(f.category||'—')}</span><span>${A.esc(f.currency||'—')} → HUF</span><span class="${A.statusClass(st)}">${A.statusLabel(st)}</span></div>`;
-    E('returns').innerHTML=[['1Y',m?.return_1y],['3Y CAGR',m?.cagr_3y],['5Y CAGR',m?.cagr_5y],['10Y CAGR',m?.cagr_10y]].map(x=>`<div class="kpi"><span>${x[0]}</span><strong class="${A.cls(x[1])}">${A.pct(x[1])}</strong><small>HUF total return</small></div>`).join('');
-    E('liveNote').textContent=`Legutóbbi alapadat: ${A.date(m?.obs_date||S.status?.last_obs_date)} · rolling analytics havi frissítéssel`;
+    const f=S.f,m=S.m,st=S.status?.screen_status||'active',meta=[f.series_name,f.isin,f.manager,f.category,f.currency?`${f.currency} → HUF`:null,riskText(f.risk_class)].filter(Boolean);
+    E('heading').innerHTML=`<div class="eyebrow">ALAP ADATLAP</div><h1>${A.esc(f.fund_name||f.series_name||f.isin)}</h1><div class="meta-line">${meta.map(x=>`<span>${A.esc(x)}</span>`).join('')}<span class="${A.statusClass(st)}">${A.statusLabel(st)}</span></div>`;
+    const returns=[['1 éves hozam',m?.return_1y],['3 éves évesített hozam',m?.cagr_3y],['5 éves évesített hozam',m?.cagr_5y],['10 éves évesített hozam',m?.cagr_10y]];
+    E('returns').innerHTML=returns.map(x=>`<div class="kpi"><span>${x[0]}</span><strong class="${A.cls(x[1])}">${A.pct(x[1])}</strong><small>HUF-ban</small></div>`).join('');
+    E('liveNote').textContent=`Legutóbbi alapadat: ${A.date(m?.obs_date||S.status?.last_obs_date)} · az összehasonlító statisztikák havonta frissülnek`;
   }
   function cards(){
-    const s=summary(S.code,S.h),p=path(S.code);E('relTitle').textContent=`${S.h}Y vs. ${short[S.code]||S.code}`;
-    E('relCards').innerHTML=metric('Beat Rate',s?.beat_rate,`${s?.observations??0} havi rolling ablak`)+metric('Mean Excess',s?.mean_excess_return,'évesített hozamkülönbség')+metric('Median Excess',s?.median_excess_return,'évesített hozamkülönbség')+metric('Aktuális excess',s?.current_excess_return,A.date(s?.current_end_date))+metric('Max Passive Regret',p?.max_passive_regret,A.date(p?.max_passive_regret_date))+metric('Relatív lemaradás',p?.longest_relative_underperformance_days,'korábbi relatív csúcs alatt','days');
-    E('risk').innerHTML=metric('Volatilitás',S.m?.annualized_volatility_1y,'trailing 1Y')+metric('Maximum Drawdown',S.m?.maximum_drawdown,'teljes napi HUF történet')+metric('DD duration',S.m?.maximum_drawdown_duration_days,'leghosszabb új csúcs nélküli idő','days')+metric('Sharpe (0% rf)',S.m?.sharpe_1y_zero_rf,'trailing 1Y','num')+metric('Sortino (0% MAR)',S.m?.sortino_1y_zero_mar,'trailing 1Y','num')+metric('Aktuális AUM',S.m?.net_assets_huf,'HUF','huf');
+    const s=summary(S.code,S.h),p=path(S.code),label=short[S.code]||S.code;
+    E('relTitle').textContent=`${label} · ${S.h} éves tartási idő · HUF-ban`;
+    E('relCards').innerHTML=
+      metric('Felülteljesítési arány',s?.beat_rate,`${s?.observations??0} vizsgált ${S.h} éves időszak`)+
+      metric('Átlagos éves többlethozam',s?.mean_excess_return,'a passzív alternatívához képest','pp')+
+      metric('Medián éves többlethozam',s?.median_excess_return,'a passzív alternatívához képest','pp')+
+      metric('Jelenlegi időszak többlethozama',s?.current_excess_return,`aktuális ${S.h} éves időszak · ${A.date(s?.current_end_date)} végdátummal`,'pp')+
+      metric('Legnagyobb relatív lemaradás',p?.max_passive_regret,A.date(p?.max_passive_regret_date))+
+      metric('Leghosszabb relatív lemaradási idő',p?.longest_relative_underperformance_days,'korábbi relatív csúcs alatt','days');
+    E('risk').innerHTML=
+      metric('Évesített volatilitás',S.m?.annualized_volatility_1y,'utolsó 1 év')+
+      metric('Maximális visszaesés',S.m?.maximum_drawdown,'teljes napi HUF-történet')+
+      metric('Leghosszabb idő új csúcs nélkül',S.m?.maximum_drawdown_duration_days,'teljes napi HUF-történet','days')+
+      metric('Sharpe-mutató',S.m?.sharpe_1y_zero_rf,'utolsó 1 év · 0% kockázatmentes hozam','num')+
+      metric('Sortino-mutató',S.m?.sortino_1y_zero_mar,'utolsó 1 év · 0% minimum hozam','num')+
+      metric('Aktuális AUM',S.m?.net_assets_huf,'HUF','huf');
   }
   function matrix(){
-    const rows=[];for(const b of S.b)for(const h of[1,3,5]){const s=summary(b.benchmark_code,h),p=path(b.benchmark_code);rows.push(`<tr><td><b>${short[b.benchmark_code]||A.esc(b.benchmark_code)}</b><div class="sub">${A.esc(b.isin)}</div></td><td>${h} év</td><td class="num">${A.pct(s?.beat_rate)}</td><td class="num ${A.cls(s?.mean_excess_return)}">${A.pct(s?.mean_excess_return)}</td><td class="num ${A.cls(s?.median_excess_return)}">${A.pct(s?.median_excess_return)}</td><td class="num ${A.cls(s?.current_excess_return)}">${A.pct(s?.current_excess_return)}</td><td class="num">${s?.observations??'—'}</td><td class="num ${A.cls(p?.max_passive_regret)}">${A.pct(p?.max_passive_regret)}</td><td class="num">${A.days(p?.longest_relative_underperformance_days)}</td></tr>`)}E('matrix').innerHTML=rows.join('');
+    const rows=[];for(const b of S.b)for(const h of[1,3,5]){const s=summary(b.benchmark_code,h),p=path(b.benchmark_code);rows.push(`<tr><td><b>${short[b.benchmark_code]||A.esc(b.benchmark_code)}</b><div class="sub">${A.esc(b.isin)}</div></td><td>${h} év</td><td class="num">${A.pct(s?.beat_rate)}</td><td class="num ${A.cls(s?.mean_excess_return)}">${A.pp(s?.mean_excess_return)}</td><td class="num ${A.cls(s?.median_excess_return)}">${A.pp(s?.median_excess_return)}</td><td class="num ${A.cls(s?.current_excess_return)}">${A.pp(s?.current_excess_return)}</td><td class="num">${s?.observations??'—'}</td><td class="num ${A.cls(p?.max_passive_regret)}">${A.pct(p?.max_passive_regret)}</td><td class="num">${A.days(p?.longest_relative_underperformance_days)}</td></tr>`)}E('matrix').innerHTML=rows.join('');
   }
   function meta(){
-    const f=S.f,st=S.status,items=[['ISIN',f.isin],['Alapkezelő',f.manager],['BAMOSZ-kategória',f.category],['Eredeti deviza',f.currency],['Indulás',f.launch_date],['Földrajzi kitettség',f.geographic_exposure],['Devizális kitettség',f.currency_exposure],['Kockázati osztály',f.risk_class],['Forgalmazási mód',f.distribution_mode],['Jogi forma',f.legal_form],['Letétkezelő',f.custodian],['Aktivitási arány (180 nap)',st?.active_flow_ratio_180==null?'—':A.pct(st.active_flow_ratio_180)]];
+    const f=S.f,st=S.status,rc=riskText(f.risk_class)?.replace('Kockázat: ','')||'—',items=[['ISIN',f.isin],['Alapkezelő',f.manager],['BAMOSZ-kategória',f.category],['Eredeti deviza',f.currency],['Indulás',f.launch_date],['Földrajzi kitettség',f.geographic_exposure],['Devizális kitettség',f.currency_exposure],['Kockázati osztály',rc],['Forgalmazási mód',f.distribution_mode],['Jogi forma',f.legal_form],['Letétkezelő',f.custodian],['Aktivitási arány (180 nap)',st?.active_flow_ratio_180==null?'—':A.pct(st.active_flow_ratio_180)]];
     E('meta').innerHTML=`<div class="head"><h2>Alapadatok</h2>${f.source_url?`<a class="textlink" href="${A.esc(f.source_url)}" target="_blank" rel="noopener">BAMOSZ-forrás ↗</a>`:''}</div><div class="metagrid">${items.map(x=>`<div><span>${x[0]}</span><strong>${A.esc(x[1]||'—')}</strong></div>`).join('')}</div>`;
   }
   function histogram(vals,bins=20){
@@ -59,27 +93,43 @@
     }
     if(!benchRows.length)return {common:[]};
     const start=[fundRows[0].obs_date,benchRows[0].obs_date].sort().at(-1),end=[fundRows.at(-1).obs_date,benchRows.at(-1).obs_date].sort()[0];
-    const fx= A.fxBook(await fxRows([S.f.currency,benchCurrency,...benchRows.map(x=>x.currency)],start,end));
+    const fx=A.fxBook(await fxRows([S.f.currency,benchCurrency,...benchRows.map(x=>x.currency)],start,end));
     const fp=A.wealthPath(fundRows,{currency:S.f.currency,fx,payout:true,currencyPerRow:false});
     const bp=b.source_kind==='bamosz_fund'?A.wealthPath(benchRows,{currency:benchCurrency,fx,payout:true,currencyPerRow:false}):A.wealthPath(benchRows,{currency:benchCurrency,fx,payout:false,currencyPerRow:benchPerRow});
     return {common:A.commonWealth(fp,bp)};
   }
   function renderRollingCharts(){
     destroy('rf');destroy('re');destroy('t');
-    S.charts.rf=new Chart(E('rollFund'),{type:'bar',data:{datasets:[{data:histogram(S.fundRoll.map(x=>x[1])),backgroundColor:'rgba(23,60,52,.55)'}]},options:{maintainAspectRatio:false,parsing:false,plugins:{legend:{display:false}},scales:{x:{type:'linear',title:{display:true,text:'CAGR (%)'}},y:{beginAtZero:true}}}});
-    S.charts.re=new Chart(E('rollEx'),{type:'bar',data:{datasets:[{data:histogram(S.relRoll.map(x=>x[1])),backgroundColor:'rgba(105,115,134,.55)'}]},options:{maintainAspectRatio:false,parsing:false,plugins:{legend:{display:false}},scales:{x:{type:'linear',title:{display:true,text:'Excess CAGR (százalékpont/év)'}},y:{beginAtZero:true}}}});
-    S.charts.t=new Chart(E('timeline'),{type:'line',data:{labels:S.relRoll.map(x=>x[0]),datasets:[{data:S.relRoll.map(x=>x[1]*100),borderColor:'rgba(23,60,52,.9)',pointRadius:0,fill:true,backgroundColor:'rgba(23,60,52,.07)',borderWidth:1.5}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{title:{display:true,text:'Excess CAGR (pp/év)'}}}}});
+    E('rollFundTitle').textContent=`${S.h} éves évesített hozamok eloszlása`;
+    E('rollExTitle').textContent=`${S.h} éves évesített többlethozamok eloszlása`;
+    E('timelineTitle').textContent=`${S.h} éves évesített többlethozam alakulása az időben`;
+    S.charts.rf=new Chart(E('rollFund'),{type:'bar',data:{datasets:[{data:histogram(S.fundRoll.map(x=>x[1])),backgroundColor:'rgba(23,60,52,.55)'}]},options:{maintainAspectRatio:false,parsing:false,plugins:{legend:{display:false}},scales:{x:{type:'linear',title:{display:true,text:'Évesített hozam (%)'}},y:{beginAtZero:true,title:{display:true,text:'Vizsgált időszakok száma'}}}}});
+    S.charts.re=new Chart(E('rollEx'),{type:'bar',data:{datasets:[{data:histogram(S.relRoll.map(x=>x[1])),backgroundColor:'rgba(105,115,134,.55)'}]},options:{maintainAspectRatio:false,parsing:false,plugins:{legend:{display:false}},scales:{x:{type:'linear',title:{display:true,text:'Éves többlethozam (százalékpont/év)'}},y:{beginAtZero:true,title:{display:true,text:'Vizsgált időszakok száma'}}}}});
+    S.charts.t=new Chart(E('timeline'),{type:'line',data:{labels:S.relRoll.map(x=>x[0]),datasets:[{data:S.relRoll.map(x=>x[1]*100),borderColor:'rgba(23,60,52,.9)',pointRadius:0,fill:true,backgroundColor:'rgba(23,60,52,.07)',borderWidth:1.5}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toFixed(1)} százalékpont/év`}}},scales:{y:{title:{display:true,text:'Éves többlethozam (százalékpont/év)'}}}}});
+  }
+  function renderHistoryContext(common){
+    const s=summary(S.code,S.h);
+    E('obsLabel').textContent=`Vizsgált ${S.h} éves időszakok`;
+    E('obsCount').textContent=s?.observations==null?'—':Number(s.observations).toLocaleString('hu-HU');
+    if(!common.length){E('commonPeriod').textContent='Nincs elegendő közös adat';return}
+    const start=common[0].date,end=common.at(-1).date;
+    E('commonPeriod').innerHTML=`${A.esc(A.date(start))} – ${A.esc(A.date(end))}<em> · ${A.esc(durationLabel(start,end))}</em>`;
   }
   async function renderDailyCharts(){
     E('chartLoading').textContent='Napi HUF idősor összeállítása…';
-    const {common}=await rawPaths();const ds=A.down(common,1400);
+    const {common}=await rawPaths();
+    renderHistoryContext(common);
+    const ds=A.down(common,1400),scale=10000;
     destroy('w');destroy('r');
-    S.charts.w=new Chart(E('wealth'),{type:'line',data:{labels:ds.map(x=>x.date),datasets:[{label:S.f.fund_name||S.f.isin,data:ds.map(x=>x.fund),borderColor:'rgba(23,60,52,.95)',pointRadius:0,borderWidth:1.7},{label:short[S.code]||S.code,data:ds.map(x=>x.bench),borderColor:'rgba(105,115,134,.85)',pointRadius:0,borderWidth:1.4}]},options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},scales:{y:{title:{display:true,text:'Kezdőérték = 100'}}}}});
-    S.charts.r=new Chart(E('regret'),{type:'line',data:{labels:ds.map(x=>x.date),datasets:[{data:ds.map(x=>x.relativeDrawdown*100),borderColor:'rgba(179,62,72,.9)',pointRadius:0,borderWidth:1.5,fill:true,backgroundColor:'rgba(179,62,72,.07)'}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{max:0,title:{display:true,text:'Relatív drawdown (%)'}}}}});
-    E('chartLoading').textContent=common.length?`${common.length.toLocaleString('hu-HU')} közös napi megfigyelés`:'Nincs elegendő közös napi adat.';
+    if(!common.length){E('wealthSummary').innerHTML='';E('chartLoading').textContent='Nincs elegendő közös napi adat.';return}
+    const last=common.at(-1),fundEnd=last.fund*scale,benchEnd=last.bench*scale,diff=fundEnd-benchEnd,label=short[S.code]||S.code;
+    E('wealthSummary').innerHTML=`<div class="wealth-stat"><span>${A.esc(S.f.fund_name||S.f.isin)}</span><strong>${A.huf(fundEnd)}</strong></div><div class="wealth-stat"><span>${A.esc(label)}</span><strong>${A.huf(benchEnd)}</strong></div><div class="wealth-stat"><span>Különbség</span><strong class="${A.cls(diff)}">${signedHuf(diff)}</strong></div>`;
+    S.charts.w=new Chart(E('wealth'),{type:'line',data:{labels:ds.map(x=>x.date),datasets:[{label:S.f.fund_name||S.f.isin,data:ds.map(x=>x.fund*scale),borderColor:'rgba(23,60,52,.95)',pointRadius:0,borderWidth:1.7},{label,data:ds.map(x=>x.bench*scale),borderColor:'rgba(105,115,134,.85)',pointRadius:0,borderWidth:1.4}]},options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${A.huf(c.parsed.y)}`}}},scales:{y:{title:{display:true,text:'Befektetés értéke (Ft)'},ticks:{callback:v=>A.huf(v)}}}}});
+    S.charts.r=new Chart(E('regret'),{type:'line',data:{labels:ds.map(x=>x.date),datasets:[{data:ds.map(x=>x.relativeDrawdown*100),borderColor:'rgba(179,62,72,.9)',pointRadius:0,borderWidth:1.5,fill:true,backgroundColor:'rgba(179,62,72,.07)'}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toFixed(1)}% relatív lemaradás`}}},scales:{y:{max:0,title:{display:true,text:'Relatív lemaradás (%)'}}}}});
+    E('chartLoading').textContent=`${common.length.toLocaleString('hu-HU')} közös napi megfigyelés · ${A.date(common[0].date)} – ${A.date(common.at(-1).date)}`;
   }
   async function refresh(){
-    tabs();cards();await loadRolling();renderRollingCharts();await renderDailyCharts();
+    tabs();await loadRolling();cards();renderRollingCharts();await renderDailyCharts();
     const u=new URL(location);u.searchParams.set('benchmark',S.code);u.searchParams.set('h',S.h);history.replaceState(null,'',u);
   }
   function bind(){
