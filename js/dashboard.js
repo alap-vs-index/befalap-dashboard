@@ -4,6 +4,11 @@
   const S={code:P.get('benchmark')||'ACWI_IMI',h:+P.get('h')||3,sort:'beat_rate',dir:-1,base:[],sum:[],path:[],bench:[],chart:null};
 
   const currentBench=()=>S.bench.find(x=>x.benchmark_code===S.code);
+  function excess(value){
+    if(value===null||value===undefined||!Number.isFinite(+value))return '—';
+    const n=+value*100,sign=n>0?'+':'';
+    return `${sign}${n.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont`;
+  }
   function fillOptions(el,values){[...new Set(values.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'hu')).forEach(x=>el.insertAdjacentHTML('beforeend',`<option value="${A.esc(x)}">${A.esc(x)}</option>`))}
   function tabs(){
     E('benchTabs').innerHTML=S.bench.map(x=>`<button data-c="${x.benchmark_code}" class="${x.benchmark_code===S.code?'active':''}" title="${A.esc(x.name)}">${short[x.benchmark_code]||A.esc(x.benchmark_code)}</button>`).join('');
@@ -48,9 +53,9 @@
       <td><span class="pill">${A.esc(x.category||'—')}</span></td>
       <td class="num">${A.huf(x.net_assets_huf)}</td>
       <td class="num ${A.cls(x.beat_rate==null?null:+x.beat_rate-.5)}">${A.pct(x.beat_rate)}</td>
-      <td class="num ${A.cls(x.mean_excess_return)}">${A.pp(x.mean_excess_return)}</td>
-      <td class="num ${A.cls(x.median_excess_return)}">${A.pp(x.median_excess_return)}</td>
-      <td class="num ${A.cls(x.current_excess_return)}">${A.pp(x.current_excess_return)}</td>
+      <td class="num ${A.cls(x.mean_excess_return)}">${excess(x.mean_excess_return)}</td>
+      <td class="num ${A.cls(x.median_excess_return)}">${excess(x.median_excess_return)}</td>
+      <td class="num ${A.cls(x.current_excess_return)}">${excess(x.current_excess_return)}</td>
       <td class="num">${A.days(x.longest_relative_underperformance_days)}</td>
       <td class="num ${A.cls(x.max_passive_regret)}">${A.pct(x.max_passive_regret)}</td>
       <td class="num ${A.cls(x.maximum_drawdown)}">${A.pct(x.maximum_drawdown)}</td>
@@ -65,7 +70,7 @@
     E('caption').textContent=`${label} · ${S.h} éves vizsgált időszakok · HUF-ban · összehasonlító statisztikák havi frissítéssel`;
     E('kFunds').textContent=r.length.toLocaleString('hu-HU');
     E('kBeat').textContent=A.pct(A.median(r.map(x=>+x.beat_rate).filter(Number.isFinite)));
-    E('kEx').textContent=A.pp(A.median(r.map(x=>+x.median_excess_return).filter(Number.isFinite)));
+    E('kEx').textContent=excess(A.median(r.map(x=>+x.median_excess_return).filter(Number.isFinite)));
     const leader=r.filter(x=>x.beat_rate!=null).sort((a,b)=>+b.beat_rate-+a.beat_rate)[0];
     E('kLead').textContent=leader?A.pct(leader.beat_rate):'—';E('kLeadName').textContent=leader?.fund_name||'—';
     E('tableBody').innerHTML=r.map(rowHtml).join('')||'<tr><td colspan="14" class="empty">Nincs a szűrésnek megfelelő alap.</td></tr>';
@@ -80,7 +85,7 @@
       r:Math.max(4,Math.min(18,4+Math.log10(Math.max(1,+x.net_assets_huf||1e7)/1e7)*2.4)),
       name:x.fund_name||x.isin,id:x.fund_id,status:x.screen_status
     }));
-    S.chart=new Chart(E('scatter'),{type:'bubble',data:{datasets:[{data:points,backgroundColor:'rgba(23,60,52,.42)',borderColor:'rgba(23,60,52,.82)',borderWidth:1}]},options:{maintainAspectRatio:false,onClick:(e,a)=>{if(a.length){const p=points[a[0].index];location.href=`fund.html?id=${p.id}&benchmark=${S.code}&h=${S.h}`}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.name}: ${c.raw.x.toFixed(1)}% felülteljesítési arány · ${c.raw.y.toFixed(1)} pp medián éves többlethozam`}}},scales:{x:{min:0,max:100,title:{display:true,text:'Felülteljesítési arány (%)'},grid:{color:'rgba(0,0,0,.05)'}},y:{title:{display:true,text:'Medián éves többlethozam (százalékpont/év)'},grid:{color:'rgba(0,0,0,.05)'}}}}});
+    S.chart=new Chart(E('scatter'),{type:'bubble',data:{datasets:[{data:points,backgroundColor:'rgba(23,60,52,.42)',borderColor:'rgba(23,60,52,.82)',borderWidth:1}]},options:{maintainAspectRatio:false,onClick:(e,a)=>{if(a.length){const p=points[a[0].index];location.href=`fund.html?id=${p.id}&benchmark=${S.code}&h=${S.h}`}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.name}: ${c.raw.x.toFixed(1)}% felülteljesítési arány · ${c.raw.y.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont medián éves többlethozam`}}},scales:{x:{min:0,max:100,title:{display:true,text:'Felülteljesítési arány (%)'},grid:{color:'rgba(0,0,0,.05)'}},y:{title:{display:true,text:'Medián éves többlethozam (százalékpont)'},grid:{color:'rgba(0,0,0,.05)'}}}}});
   }
   function bind(){
     E('benchTabs').onclick=async e=>{const z=e.target.closest('button');if(!z)return;S.code=z.dataset.c;tabs();await loadRelative();render()};

@@ -9,9 +9,14 @@
   const destroy=k=>S.charts[k]?.destroy();
 
   function tabs(){E('benchTabs').innerHTML=S.b.map(x=>`<button data-c="${x.benchmark_code}" class="${x.benchmark_code===S.code?'active':''}" title="${A.esc(x.name)}">${short[x.benchmark_code]||A.esc(x.benchmark_code)}</button>`).join('');document.querySelectorAll('#hTabs button').forEach(x=>x.classList.toggle('active',+x.dataset.h===S.h))}
+  function excess(value){
+    if(value===null||value===undefined||!Number.isFinite(+value))return '—';
+    const n=+value*100,sign=n>0?'+':'';
+    return `${sign}${n.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont`;
+  }
   function metric(label,value,sub,type='pct'){
-    const fmt=type==='pct'?A.pct(value):type==='pp'?A.pp(value):type==='days'?A.days(value):type==='huf'?A.huf(value):type==='num'?A.num(value):A.esc(value??'—');
-    return `<div class="metric"><span>${label}</span><strong class="${['pct','pp'].includes(type)?A.cls(value):''}">${fmt}</strong><small>${sub||''}</small></div>`;
+    const fmt=type==='pct'?A.pct(value):type==='excess'?excess(value):type==='days'?A.days(value):type==='huf'?A.huf(value):type==='num'?A.num(value):A.esc(value??'—');
+    return `<div class="metric"><span>${label}</span><strong class="${['pct','excess'].includes(type)?A.cls(value):''}">${fmt}</strong><small>${sub||''}</small></div>`;
   }
   function riskText(v){
     const z=String(v??'').trim();
@@ -45,9 +50,9 @@
     E('relTitle').textContent=`${label} · ${S.h} éves tartási idő · HUF-ban`;
     E('relCards').innerHTML=
       metric('Felülteljesítési arány',s?.beat_rate,`${s?.observations??0} vizsgált ${S.h} éves időszak`)+
-      metric('Átlagos éves többlethozam',s?.mean_excess_return,'a passzív alternatívához képest','pp')+
-      metric('Medián éves többlethozam',s?.median_excess_return,'a passzív alternatívához képest','pp')+
-      metric('Jelenlegi időszak többlethozama',s?.current_excess_return,`aktuális ${S.h} éves időszak · ${A.date(s?.current_end_date)} végdátummal`,'pp')+
+      metric('Átlagos éves többlethozam',s?.mean_excess_return,'az évesített hozamok különbsége','excess')+
+      metric('Medián éves többlethozam',s?.median_excess_return,'az évesített hozamok különbsége','excess')+
+      metric('Jelenlegi időszak többlethozama',s?.current_excess_return,`aktuális ${S.h} éves időszak · ${A.date(s?.current_end_date)} végdátummal`,'excess')+
       metric('Legnagyobb relatív lemaradás',p?.max_passive_regret,A.date(p?.max_passive_regret_date))+
       metric('Leghosszabb relatív lemaradási idő',p?.longest_relative_underperformance_days,'korábbi relatív csúcs alatt','days');
     E('risk').innerHTML=
@@ -59,14 +64,39 @@
       metric('Aktuális AUM',S.m?.net_assets_huf,'HUF','huf');
   }
   function matrix(){
-    const rows=[];for(const b of S.b)for(const h of[1,3,5]){const s=summary(b.benchmark_code,h),p=path(b.benchmark_code);rows.push(`<tr><td><b>${short[b.benchmark_code]||A.esc(b.benchmark_code)}</b><div class="sub">${A.esc(b.isin)}</div></td><td>${h} év</td><td class="num">${A.pct(s?.beat_rate)}</td><td class="num ${A.cls(s?.mean_excess_return)}">${A.pp(s?.mean_excess_return)}</td><td class="num ${A.cls(s?.median_excess_return)}">${A.pp(s?.median_excess_return)}</td><td class="num ${A.cls(s?.current_excess_return)}">${A.pp(s?.current_excess_return)}</td><td class="num">${s?.observations??'—'}</td><td class="num ${A.cls(p?.max_passive_regret)}">${A.pct(p?.max_passive_regret)}</td><td class="num">${A.days(p?.longest_relative_underperformance_days)}</td></tr>`)}E('matrix').innerHTML=rows.join('');
+    const rows=[];for(const b of S.b)for(const h of[1,3,5]){const s=summary(b.benchmark_code,h),p=path(b.benchmark_code);rows.push(`<tr><td><b>${short[b.benchmark_code]||A.esc(b.benchmark_code)}</b><div class="sub">${A.esc(b.isin)}</div></td><td>${h} év</td><td class="num">${A.pct(s?.beat_rate)}</td><td class="num ${A.cls(s?.mean_excess_return)}">${excess(s?.mean_excess_return)}</td><td class="num ${A.cls(s?.median_excess_return)}">${excess(s?.median_excess_return)}</td><td class="num ${A.cls(s?.current_excess_return)}">${excess(s?.current_excess_return)}</td><td class="num">${s?.observations??'—'}</td><td class="num ${A.cls(p?.max_passive_regret)}">${A.pct(p?.max_passive_regret)}</td><td class="num">${A.days(p?.longest_relative_underperformance_days)}</td></tr>`)}E('matrix').innerHTML=rows.join('');
   }
   function meta(){
     const f=S.f,st=S.status,rc=riskText(f.risk_class)?.replace('Kockázat: ','')||'—',items=[['ISIN',f.isin],['Alapkezelő',f.manager],['BAMOSZ-kategória',f.category],['Eredeti deviza',f.currency],['Indulás',f.launch_date],['Földrajzi kitettség',f.geographic_exposure],['Devizális kitettség',f.currency_exposure],['Kockázati osztály',rc],['Forgalmazási mód',f.distribution_mode],['Jogi forma',f.legal_form],['Letétkezelő',f.custodian],['Aktivitási arány (180 nap)',st?.active_flow_ratio_180==null?'—':A.pct(st.active_flow_ratio_180)]];
     E('meta').innerHTML=`<div class="head"><h2>Alapadatok</h2>${f.source_url?`<a class="textlink" href="${A.esc(f.source_url)}" target="_blank" rel="noopener">BAMOSZ-forrás ↗</a>`:''}</div><div class="metagrid">${items.map(x=>`<div><span>${x[0]}</span><strong>${A.esc(x[1]||'—')}</strong></div>`).join('')}</div>`;
   }
-  function histogram(vals,bins=20){
-    const z=vals.filter(Number.isFinite);if(!z.length)return[];let lo=Math.min(...z),hi=Math.max(...z);if(lo===hi){lo-=.001;hi+=.001}const w=(hi-lo)/bins,c=Array(bins).fill(0);z.forEach(v=>c[Math.min(bins-1,Math.floor((v-lo)/w))]++);return c.map((y,i)=>({x:(lo+(i+.5)*w)*100,y}));
+  function niceStep(raw){
+    if(!Number.isFinite(raw)||raw<=0)return 1;
+    const p=10**Math.floor(Math.log10(raw)),f=raw/p;
+    const n=f<=1?1:f<=2?2:f<=2.5?2.5:f<=5?5:10;
+    return n*p;
+  }
+  function binNumber(v,step){
+    const clean=Math.abs(v)<step/1000?0:v;
+    const decimals=step<1?Math.min(2,Math.ceil(-Math.log10(step))):Number.isInteger(step)?0:1;
+    return clean.toLocaleString('hu-HU',{minimumFractionDigits:decimals,maximumFractionDigits:decimals}).replace('-', '−');
+  }
+  function histogram(vals,targetBins=12,unit='pct'){
+    const z=vals.filter(Number.isFinite).map(v=>v*100);
+    if(!z.length)return {labels:[],counts:[]};
+    let lo=Math.min(...z),hi=Math.max(...z),span=hi-lo;
+    let step=niceStep(span>0?span/targetBins:Math.max(Math.abs(lo)*.1,1));
+    let start=Math.floor(lo/step)*step,end=Math.ceil(hi/step)*step;
+    if(end<=start)end=start+step;
+    let bins=Math.max(1,Math.round((end-start)/step));
+    while(bins>18){step=niceStep(step*1.5);start=Math.floor(lo/step)*step;end=Math.ceil(hi/step)*step;if(end<=start)end=start+step;bins=Math.max(1,Math.round((end-start)/step));}
+    const counts=Array(bins).fill(0),labels=[];
+    z.forEach(v=>{const i=Math.max(0,Math.min(bins-1,Math.floor((v-start)/step)));counts[i]++});
+    for(let i=0;i<bins;i++){
+      const a=start+i*step,b=a+step,suffix=unit==='pct'?'%':'';
+      labels.push(`${binNumber(a,step)}–${binNumber(b,step)}${suffix}`);
+    }
+    return {labels,counts};
   }
   async function loadRolling(){
     const b=bench();const [fr,rr]=await Promise.all([
@@ -103,9 +133,10 @@
     E('rollFundTitle').textContent=`${S.h} éves évesített hozamok eloszlása`;
     E('rollExTitle').textContent=`${S.h} éves évesített többlethozamok eloszlása`;
     E('timelineTitle').textContent=`${S.h} éves évesített többlethozam alakulása az időben`;
-    S.charts.rf=new Chart(E('rollFund'),{type:'bar',data:{datasets:[{data:histogram(S.fundRoll.map(x=>x[1])),backgroundColor:'rgba(23,60,52,.55)'}]},options:{maintainAspectRatio:false,parsing:false,plugins:{legend:{display:false}},scales:{x:{type:'linear',title:{display:true,text:'Évesített hozam (%)'}},y:{beginAtZero:true,title:{display:true,text:'Vizsgált időszakok száma'}}}}});
-    S.charts.re=new Chart(E('rollEx'),{type:'bar',data:{datasets:[{data:histogram(S.relRoll.map(x=>x[1])),backgroundColor:'rgba(105,115,134,.55)'}]},options:{maintainAspectRatio:false,parsing:false,plugins:{legend:{display:false}},scales:{x:{type:'linear',title:{display:true,text:'Éves többlethozam (százalékpont/év)'}},y:{beginAtZero:true,title:{display:true,text:'Vizsgált időszakok száma'}}}}});
-    S.charts.t=new Chart(E('timeline'),{type:'line',data:{labels:S.relRoll.map(x=>x[0]),datasets:[{data:S.relRoll.map(x=>x[1]*100),borderColor:'rgba(23,60,52,.9)',pointRadius:0,fill:true,backgroundColor:'rgba(23,60,52,.07)',borderWidth:1.5}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toFixed(1)} százalékpont/év`}}},scales:{y:{title:{display:true,text:'Éves többlethozam (százalékpont/év)'}}}}});
+    const fundHist=histogram(S.fundRoll.map(x=>x[1]),12,'pct'),exHist=histogram(S.relRoll.map(x=>x[1]),12,'excess');
+    S.charts.rf=new Chart(E('rollFund'),{type:'bar',data:{labels:fundHist.labels,datasets:[{data:fundHist.counts,backgroundColor:'rgba(23,60,52,.55)'}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>`Évesített hozam: ${c[0]?.label||''}`,label:c=>`${c.parsed.y} vizsgált időszak`}}},scales:{x:{title:{display:true,text:'Évesített hozam tartománya'},ticks:{maxRotation:0,minRotation:0,autoSkip:true}},y:{beginAtZero:true,ticks:{precision:0},title:{display:true,text:'Vizsgált időszakok száma'}}}}});
+    S.charts.re=new Chart(E('rollEx'),{type:'bar',data:{labels:exHist.labels,datasets:[{data:exHist.counts,backgroundColor:'rgba(105,115,134,.55)'}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{title:c=>`Évesített többlethozam: ${c[0]?.label||''} százalékpont`,label:c=>`${c.parsed.y} vizsgált időszak`}}},scales:{x:{title:{display:true,text:'Évesített többlethozam tartománya (százalékpont)'},ticks:{maxRotation:0,minRotation:0,autoSkip:true}},y:{beginAtZero:true,ticks:{precision:0},title:{display:true,text:'Vizsgált időszakok száma'}}}}});
+    S.charts.t=new Chart(E('timeline'),{type:'line',data:{labels:S.relRoll.map(x=>x[0]),datasets:[{data:S.relRoll.map(x=>x[1]*100),borderColor:'rgba(23,60,52,.9)',pointRadius:0,fill:true,backgroundColor:'rgba(23,60,52,.07)',borderWidth:1.5}]},options:{maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.parsed.y.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont`}}},scales:{y:{title:{display:true,text:'Évesített többlethozam (százalékpont)'}}}}});
   }
   function renderHistoryContext(common){
     const s=summary(S.code,S.h);
