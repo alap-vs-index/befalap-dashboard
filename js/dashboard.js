@@ -7,7 +7,7 @@
   function excess(value){
     if(value===null||value===undefined||!Number.isFinite(+value))return '—';
     const n=+value*100,sign=n>0?'+':'';
-    return `${sign}${n.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont`;
+    return `${sign}${n.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} pp`;
   }
   function fillOptions(el,values){[...new Set(values.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'hu')).forEach(x=>el.insertAdjacentHTML('beforeend',`<option value="${A.esc(x)}">${A.esc(x)}</option>`))}
   function tabs(){
@@ -85,7 +85,7 @@
       r:Math.max(4,Math.min(18,4+Math.log10(Math.max(1,+x.net_assets_huf||1e7)/1e7)*2.4)),
       name:x.fund_name||x.isin,id:x.fund_id,status:x.screen_status
     }));
-    S.chart=new Chart(E('scatter'),{type:'bubble',data:{datasets:[{data:points,backgroundColor:'rgba(23,60,52,.42)',borderColor:'rgba(23,60,52,.82)',borderWidth:1}]},options:{maintainAspectRatio:false,onClick:(e,a)=>{if(a.length){const p=points[a[0].index];location.href=`fund.html?id=${p.id}&benchmark=${S.code}&h=${S.h}`}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.name}: ${c.raw.x.toFixed(1)}% felülteljesítési arány · ${c.raw.y.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont medián éves többlethozam`}}},scales:{x:{min:0,max:100,title:{display:true,text:'Felülteljesítési arány (%)'},grid:{color:'rgba(0,0,0,.05)'}},y:{title:{display:true,text:'Medián éves többlethozam (százalékpont)'},grid:{color:'rgba(0,0,0,.05)'}}}}});
+    S.chart=new Chart(E('scatter'),{type:'bubble',data:{datasets:[{data:points,backgroundColor:'rgba(23,60,52,.42)',borderColor:'rgba(23,60,52,.82)',borderWidth:1}]},options:{maintainAspectRatio:false,onClick:(e,a)=>{if(a.length){const p=points[a[0].index];location.href=`fund.html?id=${p.id}&benchmark=${S.code}&h=${S.h}`}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.name}: ${c.raw.x.toFixed(1)}% felülteljesítési arány · ${c.raw.y.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont medián éves többlethozam`}}},scales:{x:{min:0,max:100,title:{display:true,text:'Felülteljesítési arány (%)'},grid:{color:'rgba(0,0,0,.05)'}},y:{title:{display:true,text:'Medián éves többlethozam (pp)'},grid:{color:'rgba(0,0,0,.05)'}}}}});
   }
   function bind(){
     E('benchTabs').onclick=async e=>{const z=e.target.closest('button');if(!z)return;S.code=z.dataset.c;tabs();await loadRelative();render()};
