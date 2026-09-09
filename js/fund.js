@@ -85,7 +85,7 @@
     box.innerHTML=
       metric('Inflációt megverő időszakok aránya',z.inflation_beat_rate,`${Number(z.observations||0).toLocaleString('hu-HU')} vizsgált ${S.h} éves időszak`,'neutralPct')+
       metric('Medián éves reálhozam',z.median_real_return,'nominális hozam vásárlóerő-változással korrigálva')+
-      metric('Jelenlegi időszak reálhozama',z.current_real_return,`aktuális ${S.h} éves időszak · ${monthLabel(z.current_end_month)} végponttal`)+
+      metric('Jelenlegi időszak évesített reálhozama',z.current_real_return,`aktuális ${S.h} éves időszak · ${monthLabel(z.current_end_month)} végponttal`)+
       metric('Jelenlegi időszak évesített inflációja',z.current_inflation_return,`${S.h} éves HICP-változás évesítve`,'neutralPct');
     const first=z.first_end_month?monthLabel(z.first_end_month):'—',last=z.last_end_month?monthLabel(z.last_end_month):'—';
     note.textContent=`Közös fund–passzív reálhozam-lefedettség: ${first} – ${last}. A HICP havi adat; napi inflációs értékeket nem interpolálunk.`;
