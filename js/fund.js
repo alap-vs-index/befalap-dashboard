@@ -2,11 +2,12 @@
   const A=App,E=id=>document.getElementById(id),P=new URLSearchParams(location.search),id=P.get('id');
   if(!id){E('err').innerHTML='<div class="error">Hiányzik a fund id.</div>';return}
   const short={ACWI_IMI:'ACWI IMI',SP500:'S&P 500',STOXX600:'STOXX 600',BUX:'BUX'};
-  const S={code:P.get('benchmark')||'ACWI_IMI',h:+P.get('h')||3,wr:P.get('wr')||'5y',customFrom:P.get('from')||'',customTo:P.get('to')||'',f:null,m:null,status:null,b:[],sum:[],paths:[],fundRoll:[],relRoll:[],common:[],dailyCache:{},charts:{}};
+  const S={code:P.get('benchmark')||'ACWI_IMI',h:+P.get('h')||3,wr:P.get('wr')||'5y',customFrom:P.get('from')||'',customTo:P.get('to')||'',f:null,m:null,status:null,b:[],sum:[],paths:[],fundRoll:[],relRoll:[],common:[],inflationSum:[],cpi:[],inflationLoaded:false,inflationError:false,dailyCache:{},charts:{}};
   if(!['ytd','1y','3y','5y','max','custom'].includes(S.wr))S.wr='5y';
   const bench=()=>S.b.find(x=>x.benchmark_code===S.code);
   const summary=(code,h)=>{const b=S.b.find(x=>x.benchmark_code===code);return S.sum.find(x=>String(x.benchmark_id)===String(b?.benchmark_id)&&+x.horizon_years===+h)};
   const path=code=>{const b=S.b.find(x=>x.benchmark_code===code);return S.paths.find(x=>String(x.benchmark_id)===String(b?.benchmark_id))};
+  const inflationSummary=h=>S.inflationSum.find(x=>x.benchmark_code===S.code&&+x.horizon_years===+h);
   const destroy=k=>S.charts[k]?.destroy();
 
   function tabs(){E('benchTabs').innerHTML=S.b.map(x=>`<button data-c="${x.benchmark_code}" class="${x.benchmark_code===S.code?'active':''}" title="${A.esc(x.name)}">${short[x.benchmark_code]||A.esc(x.benchmark_code)}</button>`).join('');document.querySelectorAll('#hTabs button').forEach(x=>x.classList.toggle('active',+x.dataset.h===S.h))}
@@ -16,7 +17,7 @@
     return `${sign}${n.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} ${compact?'pp':'százalékpont'}`;
   }
   function metric(label,value,sub,type='pct'){
-    const fmt=type==='pct'?A.pct(value):type==='excess'?excess(value):type==='days'?A.days(value):type==='huf'?A.huf(value):type==='num'?A.num(value):A.esc(value??'—');
+    const fmt=['pct','neutralPct'].includes(type)?A.pct(value):type==='excess'?excess(value):type==='days'?A.days(value):type==='huf'?A.huf(value):type==='num'?A.num(value):A.esc(value??'—');
     return `<div class="metric"><span>${label}</span><strong class="${['pct','excess'].includes(type)?A.cls(value):''}">${fmt}</strong><small>${sub||''}</small></div>`;
   }
   function riskText(v){
@@ -64,6 +65,55 @@
       metric('Sortino-mutató',S.m?.sortino_1y_zero_mar,'utolsó 1 év · 0% minimum hozam','num')+
       metric('Aktuális AUM',S.m?.net_assets_huf,'HUF','huf');
   }
+  function monthKey(iso){return `${String(iso||'').slice(0,7)}-01`}
+  function monthLabel(iso){
+    if(!iso)return '—';
+    const d=new Date(`${String(iso).slice(0,10)}T12:00:00Z`);
+    return Number.isNaN(+d)?'—':d.toLocaleDateString('hu-HU',{year:'numeric',month:'long',timeZone:'UTC'});
+  }
+  function renderInflation(){
+    const box=E('inflationCards'),note=E('inflationNote'),subtitle=E('inflationSubtitle');
+    if(!S.inflationLoaded){subtitle.textContent='Eurostat HICP adatok betöltése…';return}
+    const z=inflationSummary(S.h);
+    if(!z){
+      subtitle.textContent=`Eurostat magyar HICP · ${short[S.code]||S.code} közös history`;
+      box.innerHTML=`<div class="empty inflation-empty">${S.inflationError?'Az inflációs adatforrás jelenleg nem érhető el.':'Ehhez az alap–passzív párhoz és tartási időhöz még nincs elegendő közös HICP-történet.'}</div>`;
+      note.textContent=S.inflationError?'Az inflációs modul átmeneti hibája nem érinti az alap és a passzív alternatívák többi elemzését.':'A mutató csak a kiválasztott alap és passzív alternatíva tényleges közös időszakaiból készül, amelyekhez Eurostat HICP-adat is rendelkezésre áll.';
+      return;
+    }
+    subtitle.textContent=`Eurostat magyar HICP · ${short[S.code]||S.code} közös history · ${S.h} éves, havi léptetésű időszakok`;
+    box.innerHTML=
+      metric('Inflációt megverő időszakok aránya',z.inflation_beat_rate,`${Number(z.observations||0).toLocaleString('hu-HU')} vizsgált ${S.h} éves időszak`,'neutralPct')+
+      metric('Medián éves reálhozam',z.median_real_return,'nominális hozam vásárlóerő-változással korrigálva')+
+      metric('Jelenlegi időszak reálhozama',z.current_real_return,`aktuális ${S.h} éves időszak · ${monthLabel(z.current_end_month)} végponttal`)+
+      metric('Jelenlegi időszak évesített inflációja',z.current_inflation_return,`${S.h} éves HICP-változás évesítve`,'neutralPct');
+    const first=z.first_end_month?monthLabel(z.first_end_month):'—',last=z.last_end_month?monthLabel(z.last_end_month):'—';
+    note.textContent=`Közös fund–passzív reálhozam-lefedettség: ${first} – ${last}. A HICP havi adat; napi inflációs értékeket nem interpolálunk.`;
+  }
+  async function loadInflation(){
+    try{
+      const [sums,cpi]=await Promise.all([
+        A.all('fund_inflation_summary',{filters:{fund_id:`eq.${id}`},order:'horizon_years.asc'}),
+        A.all('inflation_monthly',{select:'period_month,price_index,mom_index,yoy_index,source',order:'period_month.asc'})
+      ]);
+      S.inflationSum=sums;S.cpi=cpi;
+    }catch(e){console.warn('Inflation module unavailable',e);S.inflationError=true;S.inflationSum=[];S.cpi=[]}
+    S.inflationLoaded=true;renderInflation();if(S.common.length)renderWealthChart();
+  }
+  function purchasingPowerInfo(rebased){
+    if(!S.cpi.length||rebased.length<2)return null;
+    const startMonth=monthKey(rebased[0].date),endMonth=monthKey(rebased.at(-1).date);
+    const start=S.cpi.find(x=>x.period_month===startMonth&&Number.isFinite(+x.price_index)&&+x.price_index>0);
+    if(!start)return null;
+    const months=new Set(rebased.map(x=>monthKey(x.date)));
+    const eligible=S.cpi.filter(x=>x.period_month>startMonth&&x.period_month<=endMonth&&months.has(x.period_month)&&Number.isFinite(+x.price_index)&&+x.price_index>0);
+    const end=eligible.at(-1);if(!end)return null;
+    let idx=-1;for(let i=rebased.length-1;i>=0;i--){if(monthKey(rebased[i].date)===end.period_month){idx=i;break}}
+    if(idx<0)return null;
+    const required=1e6*(+end.price_index)/(+start.price_index),fundValue=rebased[idx].fund,real=fundValue/required-1;
+    return {required,fundValue,real,cpiEnd:end.period_month,fundEnd:rebased[idx].date,selectedEndMonth:endMonth};
+  }
+
   function matrix(){
     const rows=[];for(const b of S.b)for(const h of[1,3,5]){const s=summary(b.benchmark_code,h),p=path(b.benchmark_code);rows.push(`<tr><td><b>${short[b.benchmark_code]||A.esc(b.benchmark_code)}</b><div class="sub">${A.esc(b.isin)}</div></td><td>${h} év</td><td class="num">${A.pct(s?.beat_rate)}</td><td class="num ${A.cls(s?.mean_excess_return)}">${excess(s?.mean_excess_return,true)}</td><td class="num ${A.cls(s?.median_excess_return)}">${excess(s?.median_excess_return,true)}</td><td class="num ${A.cls(s?.current_excess_return)}">${excess(s?.current_excess_return,true)}</td><td class="num">${s?.observations??'—'}</td><td class="num ${A.cls(p?.max_passive_regret)}">${A.pct(p?.max_passive_regret)}</td><td class="num">${A.days(p?.longest_relative_underperformance_days)}</td></tr>`)}E('matrix').innerHTML=rows.join('');
   }
@@ -197,10 +247,16 @@
   }
   function renderWealthChart(){
     destroy('w');const sel=wealthSelection(S.common),msg=E('wealthRangeMsg');msg.textContent='';
-    if(sel.error){E('wealthSummary').innerHTML='';E('chartLoading').textContent=sel.error;msg.textContent=sel.error;return}
-    const rows=sel.rows;if(!rows.length){E('wealthSummary').innerHTML='';E('chartLoading').textContent='Nincs elegendő közös napi adat.';return}
-    const base=rows[0],rebased=rows.map(x=>({date:x.date,fund:x.fund/base.fund*1e6,bench:x.bench/base.bench*1e6})),ds=A.down(rebased,1400),last=rebased.at(-1),fundEnd=last.fund,benchEnd=last.bench,diff=fundEnd-benchEnd,fundRet=fundEnd/1e6-1,benchRet=benchEnd/1e6-1,label=short[S.code]||S.code;
-    E('wealthSummary').innerHTML=`<div class="wealth-stat"><span>${A.esc(S.f.fund_name||S.f.isin)}</span><strong>${A.huf(fundEnd)}</strong><small>${A.pct(fundRet)} teljes hozam</small></div><div class="wealth-stat"><span>${A.esc(label)}</span><strong>${A.huf(benchEnd)}</strong><small>${A.pct(benchRet)} teljes hozam</small></div><div class="wealth-stat"><span>Különbség</span><strong class="${A.cls(diff)}">${signedHuf(diff)}</strong><small>alap mínusz passzív alternatíva</small></div>`;
+    if(sel.error){E('wealthSummary').classList.remove('has-inflation');E('wealthSummary').innerHTML='';E('wealthInflationNote').textContent='';E('chartLoading').textContent=sel.error;msg.textContent=sel.error;return}
+    const rows=sel.rows;if(!rows.length){E('wealthSummary').classList.remove('has-inflation');E('wealthSummary').innerHTML='';E('wealthInflationNote').textContent='';E('chartLoading').textContent='Nincs elegendő közös napi adat.';return}
+    const base=rows[0],rebased=rows.map(x=>({date:x.date,fund:x.fund/base.fund*1e6,bench:x.bench/base.bench*1e6})),ds=A.down(rebased,1400),last=rebased.at(-1),fundEnd=last.fund,benchEnd=last.bench,diff=fundEnd-benchEnd,fundRet=fundEnd/1e6-1,benchRet=benchEnd/1e6-1,label=short[S.code]||S.code,pp=purchasingPowerInfo(rebased);
+    const ppCard=pp?`<div class="wealth-stat"><span>Vásárlóerő megőrzéséhez</span><strong>${A.huf(pp.required)}</strong><small>Eurostat HICP · ${monthLabel(pp.cpiEnd)} · alap reálhozama ${A.pct(pp.real)}</small></div>`:'';
+    const ws=E('wealthSummary');ws.classList.toggle('has-inflation',!!pp);
+    ws.innerHTML=`<div class="wealth-stat"><span>${A.esc(S.f.fund_name||S.f.isin)}</span><strong>${A.huf(fundEnd)}</strong><small>${A.pct(fundRet)} teljes hozam</small></div><div class="wealth-stat"><span>${A.esc(label)}</span><strong>${A.huf(benchEnd)}</strong><small>${A.pct(benchRet)} teljes hozam</small></div><div class="wealth-stat"><span>Különbség</span><strong class="${A.cls(diff)}">${signedHuf(diff)}</strong><small>alap mínusz passzív alternatíva</small></div>${ppCard}`;
+    const win=E('wealthInflationNote');
+    if(pp&&pp.cpiEnd<pp.selectedEndMonth)win.textContent=`A vásárlóerő-küszöb a legutóbb publikált, a kiválasztott időtávba eső HICP-hónapig (${monthLabel(pp.cpiEnd)}) értendő; a későbbi napokra nem becsülünk inflációt.`;
+    else if(!pp&&S.inflationLoaded&&S.cpi.length&&monthKey(rows[0].date)<S.cpi[0].period_month)win.textContent=`Ehhez a teljes időtávhoz nem mutatunk részleges vásárlóerő-küszöböt: az Eurostat HICP-idősor ${monthLabel(S.cpi[0].period_month)} hónaptól érhető el.`;
+    else win.textContent='';
     S.charts.w=new Chart(E('wealth'),{type:'line',data:{labels:ds.map(x=>x.date),datasets:[{label:S.f.fund_name||S.f.isin,data:ds.map(x=>x.fund),borderColor:'rgba(23,60,52,.95)',pointRadius:0,borderWidth:1.7},{label,data:ds.map(x=>x.bench),borderColor:'rgba(105,115,134,.85)',pointRadius:0,borderWidth:1.4}]},options:{maintainAspectRatio:false,interaction:{mode:'index',intersect:false},plugins:{tooltip:{callbacks:{label:c=>`${c.dataset.label}: ${A.huf(c.parsed.y)}`}}},scales:{y:{title:{display:true,text:'Befektetés értéke (Ft)'},ticks:{callback:v=>A.huf(v)}}}}});
     const adjusted=S.wr==='custom'&&(rows[0].date!==sel.requestedFrom||rows.at(-1).date!==sel.requestedTo);
     E('chartLoading').textContent=`${wealthRangeName()} · ${A.date(rows[0].date)} – ${A.date(rows.at(-1).date)} · ${rows.length.toLocaleString('hu-HU')} közös napi megfigyelés`;
@@ -217,7 +273,7 @@
     updateWealthControls(common);renderWealthChart();renderRegretChart();
   }
   async function refresh(){
-    tabs();await loadRolling();cards();renderRollingCharts();await renderDailyCharts();
+    tabs();await loadRolling();cards();renderInflation();renderRollingCharts();await renderDailyCharts();
     updateUrl();
   }
   function bind(){
@@ -232,6 +288,6 @@
       A.page('funds',{filters:{fund_id:`eq.${id}`},limit:1}),A.page('fund_metrics',{filters:{fund_id:`eq.${id}`},limit:1}),A.page('fund_screen_status',{filters:{fund_id:`eq.${id}`},limit:1}),A.all('benchmarks',{filters:{enabled:'eq.true'},order:'benchmark_id.asc'}),A.all('relative_summary',{filters:{fund_id:`eq.${id}`}}),A.all('relative_path_summary',{filters:{fund_id:`eq.${id}`}})
     ]);
     S.f=f[0];S.m=m[0]||{};S.status=st[0]||{};S.b=b;S.sum=s;S.paths=p;if(!S.f)throw new Error('Alap nem található.');if(!S.b.some(x=>x.benchmark_code===S.code))S.code='ACWI_IMI';
-    heading();matrix();meta();bind();await refresh();
+    heading();matrix();meta();bind();await refresh();await loadInflation();
   }catch(e){console.error(e);E('err').innerHTML=`<div class="error"><b>Adatbetöltési hiba.</b><br>${A.esc(e.message)}</div>`}
 })();
