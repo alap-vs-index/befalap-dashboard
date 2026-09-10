@@ -7,7 +7,7 @@
   const bench=()=>S.b.find(x=>x.benchmark_code===S.code);
   const summary=(code,h)=>{const b=S.b.find(x=>x.benchmark_code===code);return S.sum.find(x=>String(x.benchmark_id)===String(b?.benchmark_id)&&+x.horizon_years===+h)};
   const path=code=>{const b=S.b.find(x=>x.benchmark_code===code);return S.paths.find(x=>String(x.benchmark_id)===String(b?.benchmark_id))};
-  const inflationSummary=h=>S.inflationSum.find(x=>x.benchmark_code===S.code&&+x.horizon_years===+h);
+  const inflationSummary=h=>S.inflationSum.find(x=>+x.horizon_years===+h);
   const destroy=k=>S.charts[k]?.destroy();
 
   function tabs(){E('benchTabs').innerHTML=S.b.map(x=>`<button data-c="${x.benchmark_code}" class="${x.benchmark_code===S.code?'active':''}" title="${A.esc(x.name)}">${short[x.benchmark_code]||A.esc(x.benchmark_code)}</button>`).join('');document.querySelectorAll('#hTabs button').forEach(x=>x.classList.toggle('active',+x.dataset.h===S.h))}
@@ -76,19 +76,19 @@
     if(!S.inflationLoaded){subtitle.textContent='Eurostat HICP adatok betöltése…';return}
     const z=inflationSummary(S.h);
     if(!z){
-      subtitle.textContent=`Eurostat magyar HICP · ${short[S.code]||S.code} közös history`;
-      box.innerHTML=`<div class="empty inflation-empty">${S.inflationError?'Az inflációs adatforrás jelenleg nem érhető el.':'Ehhez az alap–passzív párhoz és tartási időhöz még nincs elegendő közös HICP-történet.'}</div>`;
-      note.textContent=S.inflationError?'Az inflációs modul átmeneti hibája nem érinti az alap és a passzív alternatívák többi elemzését.':'A mutató csak a kiválasztott alap és passzív alternatíva tényleges közös időszakaiból készül, amelyekhez Eurostat HICP-adat is rendelkezésre áll.';
+      subtitle.textContent=`Eurostat magyar HICP · az alap saját története`;
+      box.innerHTML=`<div class="empty inflation-empty">${S.inflationError?'Az inflációs adatforrás jelenleg nem érhető el.':'Ehhez az alaphoz és tartási időhöz még nincs elegendő HICP-történet.'}</div>`;
+      note.textContent=S.inflationError?'Az inflációs modul átmeneti hibája nem érinti az alap és a passzív alternatívák többi elemzését.':'A mutató az alap saját történetéből készül, attól a ponttól, ahol a teljes vizsgált időszakhoz Eurostat HICP-adat is rendelkezésre áll.';
       return;
     }
-    subtitle.textContent=`Eurostat magyar HICP · ${short[S.code]||S.code} közös history · ${S.h} éves, havi léptetésű időszakok`;
+    subtitle.textContent=`Eurostat magyar HICP · az alap saját története · ${S.h} éves, havi léptetésű időszakok`;
     box.innerHTML=
       metric('Inflációt megverő időszakok aránya',z.inflation_beat_rate,`${Number(z.observations||0).toLocaleString('hu-HU')} vizsgált ${S.h} éves időszak`,'neutralPct')+
       metric('Medián éves reálhozam',z.median_real_return,'nominális hozam vásárlóerő-változással korrigálva')+
       metric('Jelenlegi időszak évesített reálhozama',z.current_real_return,`aktuális ${S.h} éves időszak · ${monthLabel(z.current_end_month)} végponttal`)+
       metric('Jelenlegi időszak évesített inflációja',z.current_inflation_return,`${S.h} éves HICP-változás évesítve`,'neutralPct');
     const first=z.first_end_month?monthLabel(z.first_end_month):'—',last=z.last_end_month?monthLabel(z.last_end_month):'—';
-    note.textContent=`Közös fund–passzív reálhozam-lefedettség: ${first} – ${last}. A HICP havi adat; napi inflációs értékeket nem interpolálunk.`;
+    note.textContent=`Reálhozam-megfigyelések végpontjai: ${first} – ${last}. Az elemzés az alap saját történetét használja; passzív alternatíva váltásakor nem változik. A HICP havi adat, napi inflációs értékeket nem interpolálunk.`;
   }
   async function loadInflation(){
     try{
