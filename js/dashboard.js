@@ -1,7 +1,7 @@
 (async()=>{
 const A=App,E=id=>document.getElementById(id),P=new URLSearchParams(location.search);
 const short={ACWI_IMI:'ACWI IMI',SP500:'S&P 500',STOXX600:'STOXX 600',BUX:'BUX'};
-const S={code:P.get('benchmark')||'ACWI_IMI',h:+P.get('h')||3,sort:'beat_rate',dir:-1,base:[],sum:[],path:[],risk:[],bench:[],chart:null};
+const S={code:P.get('benchmark')||'ACWI_IMI',h:+P.get('h')||3,sort:'beat_rate',dir:-1,base:[],sum:[],path:[],bench:[],chart:null};
 const currentBench=()=>S.bench.find(x=>x.benchmark_code===S.code);
 function excess(value){
 if(value===null||value===undefined||!Number.isFinite(+value))return '—';
@@ -16,18 +16,16 @@ document.querySelectorAll('#hTabs button').forEach(x=>x.classList.toggle('active
 async function loadRelative(){
 const b=currentBench();
 if(!b) throw new Error('A kiválasztott passzív alternatíva nem található.');
-[S.sum,S.path,S.risk]=await Promise.all([
+[S.sum,S.path]=await Promise.all([
 A.all('relative_summary',{filters:{benchmark_id:`eq.${b.benchmark_id}`,horizon_years:`eq.${S.h}`}}),
-A.all('relative_path_summary',{filters:{benchmark_id:`eq.${b.benchmark_id}`}}),
-A.all('fund_risk_horizon',{select:'fund_id,horizon_code,annualized_volatility,sharpe_3m_dkj,sortino_3m_dkj,risk_free_coverage,start_date,end_date,observations',filters:{horizon_code:`eq.${S.h}Y`}})
+A.all('relative_path_summary',{filters:{benchmark_id:`eq.${b.benchmark_id}`}})
 ]);
 }
 function mergedRows(){
 const sm=new Map(S.sum.map(x=>[String(x.fund_id),x]));
 const pm=new Map(S.path.map(x=>[String(x.fund_id),x]));
-const rm=new Map(S.risk.map(x=>[String(x.fund_id),x]));
 const q=E('search').value.trim().toLowerCase(),minObs=+E('obs').value,showAll=E('showInactive').checked;
-let rows=S.base.map(x=>{const risk=rm.get(String(x.fund_id));return {...x,...sm.get(String(x.fund_id)),...pm.get(String(x.fund_id)),risk_sharpe:risk?.sharpe_3m_dkj??null,risk_sortino:risk?.sortino_3m_dkj??null,risk_volatility:risk?.annualized_volatility??null,risk_coverage:risk?.risk_free_coverage??null,risk_observations:risk?.observations??null}});
+let rows=S.base.map(x=>({...x,...sm.get(String(x.fund_id)),...pm.get(String(x.fund_id))}));
 rows=rows.filter(x=>showAll||x.screen_status==='active');
 rows=rows.filter(x=>(x.observations||0)>=minObs);
 if(q) rows=rows.filter(x=>[x.fund_name,x.series_name,x.isin,x.manager,x.category,x.currency,x.risk_class].some(v=>String(v||'').toLowerCase().includes(q)));
@@ -61,21 +59,14 @@ return `<tr class="${status==='active'?'':'inactive-row'}">
 <td class="num ${A.cls(x.max_passive_regret)}">${A.pct(x.max_passive_regret)}</td>
 <td class="num ${A.cls(x.maximum_drawdown)}">${A.pct(x.maximum_drawdown)}</td>
 <td class="num">${A.days(x.maximum_drawdown_duration_days)}</td>
-<td class="num">${A.num(x.risk_sharpe)}</td>
-<td class="num">${A.num(x.risk_sortino)}</td>
+<td class="num">${A.num(x.sharpe_1y_zero_rf)}</td>
+<td class="num">${A.num(x.sortino_1y_zero_mar)}</td>
 <td class="num">${x.observations??'—'}</td>
 </tr>`;
 }
-function renderRiskHeaders(){
-const sh=document.querySelector('th[data-s="sharpe_1y_zero_rf"],th[data-s="sharpe_1y_3m_dkj"],th[data-s="risk_sharpe"]');
-const so=document.querySelector('th[data-s="sortino_1y_zero_mar"],th[data-s="sortino_1y_3m_dkj"],th[data-s="risk_sortino"]');
-if(sh){sh.dataset.s='risk_sharpe';sh.textContent=`Sharpe (${S.h} év)`;sh.title='Lezárt havi HUF-hozamokból, 3M DKJ kockázatmentes referenciával';}
-if(so){so.dataset.s='risk_sortino';so.textContent=`Sortino (${S.h} év)`;so.title='Lezárt havi HUF-hozamokból, 3M DKJ minimum elvárt hozammal';}
-}
 function render(){
 const r=mergedRows(),label=short[S.code]||S.code;
-renderRiskHeaders();
-E('caption').textContent=`${label} · ${S.h} éves vizsgált időszakok · HUF-ban · Sharpe/Sortino: lezárt havi hozamok, 3M DKJ referencia`;
+E('caption').textContent=`${label} · ${S.h} éves vizsgált időszakok · HUF-ban · összehasonlító statisztikák havi frissítéssel`;
 E('kFunds').textContent=r.length.toLocaleString('hu-HU');
 E('kBeat').textContent=A.pct(A.median(r.map(x=>+x.beat_rate).filter(Number.isFinite)));
 E('kEx').textContent=excess(A.median(r.map(x=>+x.median_excess_return).filter(Number.isFinite)));
