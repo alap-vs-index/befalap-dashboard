@@ -1,7 +1,7 @@
 (async()=>{
 const A=App,E=id=>document.getElementById(id),P=new URLSearchParams(location.search);
 const short={ACWI_IMI:'ACWI IMI',SP500:'S&P 500',STOXX600:'STOXX 600',BUX:'BUX'};
-const S={code:P.get('benchmark')||'ACWI_IMI',h:+P.get('h')||3,sort:'beat_rate',dir:-1,base:[],sum:[],path:[],bench:[],chart:null};
+const S={code:P.get('benchmark')||'ACWI_IMI',h:+P.get('h')||3,sort:'beat_rate',dir:-1,base:[],sum:[],path:[],risk:[],riskCache:new Map(),bench:[],chart:null};
 const currentBench=()=>S.bench.find(x=>x.benchmark_code===S.code);
 function excess(value){
 if(value===null||value===undefined||!Number.isFinite(+value))return '—';
@@ -9,9 +9,16 @@ const n=+value*100,sign=n>0?'+':'';
 return `${sign}${n.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} pp`;
 }
 function fillOptions(el,values){[...new Set(values.filter(Boolean))].sort((a,b)=>String(a).localeCompare(String(b),'hu')).forEach(x=>el.insertAdjacentHTML('beforeend',`<option value="${A.esc(x)}">${A.esc(x)}</option>`))}
+function updateRiskHeaders(){
+const sh=document.querySelector('th[data-s="sharpe_1y_zero_rf"],th[data-s="risk_sharpe"]');
+const so=document.querySelector('th[data-s="sortino_1y_zero_mar"],th[data-s="risk_sortino"]');
+if(sh){sh.dataset.s='risk_sharpe';sh.textContent=`Sharpe (${S.h} év)`;sh.title='Lezárt havi hozamokból, 3M DKJ kockázatmentes referenciával.'}
+if(so){so.dataset.s='risk_sortino';so.textContent=`Sortino (${S.h} év)`;so.title='Lezárt havi hozamokból, 3M DKJ minimum elvárt hozammal.'}
+}
 function tabs(){
 E('benchTabs').innerHTML=S.bench.map(x=>`<button data-c="${x.benchmark_code}" class="${x.benchmark_code===S.code?'active':''}" title="${A.esc(x.name)}">${short[x.benchmark_code]||A.esc(x.benchmark_code)}</button>`).join('');
 document.querySelectorAll('#hTabs button').forEach(x=>x.classList.toggle('active',+x.dataset.h===S.h));
+updateRiskHeaders();
 }
 async function loadRelative(){
 const b=currentBench();
@@ -21,11 +28,26 @@ A.all('relative_summary',{filters:{benchmark_id:`eq.${b.benchmark_id}`,horizon_y
 A.all('relative_path_summary',{filters:{benchmark_id:`eq.${b.benchmark_id}`}})
 ]);
 }
+async function loadRisk(){
+const code=`${S.h}Y`;
+if(S.riskCache.has(code)){S.risk=S.riskCache.get(code);return}
+try{
+const rows=await A.all('fund_risk_horizon',{select:'fund_id,horizon_code,sharpe_3m_dkj,sortino_3m_dkj',filters:{horizon_code:`eq.${code}`}});
+S.riskCache.set(code,rows);S.risk=rows;
+}catch(e){
+console.warn(`A ${code} havi kockázati mutatók nem tölthetők be; a screener többi része változatlanul működik.`,e);
+S.risk=[];
+}
+}
 function mergedRows(){
 const sm=new Map(S.sum.map(x=>[String(x.fund_id),x]));
 const pm=new Map(S.path.map(x=>[String(x.fund_id),x]));
+const rm=new Map(S.risk.map(x=>[String(x.fund_id),x]));
 const q=E('search').value.trim().toLowerCase(),minObs=+E('obs').value,showAll=E('showInactive').checked;
-let rows=S.base.map(x=>({...x,...sm.get(String(x.fund_id)),...pm.get(String(x.fund_id))}));
+let rows=S.base.map(x=>{
+const r=rm.get(String(x.fund_id));
+return {...x,...sm.get(String(x.fund_id)),...pm.get(String(x.fund_id)),risk_sharpe:r?.sharpe_3m_dkj??null,risk_sortino:r?.sortino_3m_dkj??null};
+});
 rows=rows.filter(x=>showAll||x.screen_status==='active');
 rows=rows.filter(x=>(x.observations||0)>=minObs);
 if(q) rows=rows.filter(x=>[x.fund_name,x.series_name,x.isin,x.manager,x.category,x.currency,x.risk_class].some(v=>String(v||'').toLowerCase().includes(q)));
@@ -48,7 +70,7 @@ function rowHtml(x){
 const status=x.screen_status||'active';
 const sub=[x.series_name,x.isin,x.manager].filter(Boolean).join(' · ');
 return `<tr class="${status==='active'?'':'inactive-row'}">
-<td><a class="fund" href="fund.html?id=${x.fund_id}&benchmark=${S.code}&h=${S.h}">${A.esc(x.fund_name||x.series_name||x.isin)}</a><div class="sub">${A.esc(sub||x.isin||'—')}</div><span class="${A.statusClass(status)}">${A.statusLabel(status)}</span></td>
+<td><a class="fund" href="fund.html?id=${x.fund_id}&benchmark=${S.code}&h=${S.h}&rh=${S.h}Y">${A.esc(x.fund_name||x.series_name||x.isin)}</a><div class="sub">${A.esc(sub||x.isin||'—')}</div><span class="${A.statusClass(status)}">${A.statusLabel(status)}</span></td>
 <td><span class="pill">${A.esc(x.category||'—')}</span></td>
 <td class="num">${A.huf(x.net_assets_huf)}</td>
 <td class="num ${A.cls(x.beat_rate==null?null:+x.beat_rate-.5)}">${A.pct(x.beat_rate)}</td>
@@ -59,8 +81,8 @@ return `<tr class="${status==='active'?'':'inactive-row'}">
 <td class="num ${A.cls(x.max_passive_regret)}">${A.pct(x.max_passive_regret)}</td>
 <td class="num ${A.cls(x.maximum_drawdown)}">${A.pct(x.maximum_drawdown)}</td>
 <td class="num">${A.days(x.maximum_drawdown_duration_days)}</td>
-<td class="num">${A.num(x.sharpe_1y_zero_rf)}</td>
-<td class="num">${A.num(x.sortino_1y_zero_mar)}</td>
+<td class="num">${A.num(x.risk_sharpe)}</td>
+<td class="num">${A.num(x.risk_sortino)}</td>
 <td class="num">${x.observations??'—'}</td>
 </tr>`;
 }
@@ -84,11 +106,11 @@ x:+x.beat_rate*100,y:+x.median_excess_return*100,
 r:Math.max(4,Math.min(18,4+Math.log10(Math.max(1,+x.net_assets_huf||1e7)/1e7)*2.4)),
 name:x.fund_name||x.isin,id:x.fund_id,status:x.screen_status
 }));
-S.chart=new Chart(E('scatter'),{type:'bubble',data:{datasets:[{data:points,backgroundColor:'rgba(23,60,52,.42)',borderColor:'rgba(23,60,52,.82)',borderWidth:1}]},options:{maintainAspectRatio:false,onClick:(e,a)=>{if(a.length){const p=points[a[0].index];location.href=`fund.html?id=${p.id}&benchmark=${S.code}&h=${S.h}`}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.name}: ${c.raw.x.toFixed(1)}% felülteljesítési arány · ${c.raw.y.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont medián éves többlethozam`}}},scales:{x:{min:0,max:100,title:{display:true,text:'Felülteljesítési arány (%)'},grid:{color:'rgba(0,0,0,.05)'}},y:{title:{display:true,text:'Medián éves többlethozam (pp)'},grid:{color:'rgba(0,0,0,.05)'}}}}});
+S.chart=new Chart(E('scatter'),{type:'bubble',data:{datasets:[{data:points,backgroundColor:'rgba(23,60,52,.42)',borderColor:'rgba(23,60,52,.82)',borderWidth:1}]},options:{maintainAspectRatio:false,onClick:(e,a)=>{if(a.length){const p=points[a[0].index];location.href=`fund.html?id=${p.id}&benchmark=${S.code}&h=${S.h}&rh=${S.h}Y`}},plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`${c.raw.name}: ${c.raw.x.toFixed(1)}% felülteljesítési arány · ${c.raw.y.toLocaleString('hu-HU',{minimumFractionDigits:1,maximumFractionDigits:1})} százalékpont medián éves többlethozam`}}},scales:{x:{min:0,max:100,title:{display:true,text:'Felülteljesítési arány (%)'},grid:{color:'rgba(0,0,0,.05)'}},y:{title:{display:true,text:'Medián éves többlethozam (pp)'},grid:{color:'rgba(0,0,0,.05)'}}}}});
 }
 function bind(){
 E('benchTabs').onclick=async e=>{const z=e.target.closest('button');if(!z)return;S.code=z.dataset.c;tabs();await loadRelative();render()};
-document.querySelectorAll('#hTabs button').forEach(z=>z.onclick=async()=>{S.h=+z.dataset.h;tabs();await loadRelative();render()});
+document.querySelectorAll('#hTabs button').forEach(z=>z.onclick=async()=>{S.h=+z.dataset.h;tabs();await Promise.all([loadRelative(),loadRisk()]);render()});
 ['search','manager','category','currency','risk','obs','showInactive'].forEach(id=>E(id).addEventListener(id==='search'?'input':'change',render));
 document.querySelectorAll('th[data-s]').forEach(th=>th.onclick=()=>{S.sort===th.dataset.s?S.dir*=-1:(S.sort=th.dataset.s,S.dir=['fund_name','category'].includes(S.sort)?1:-1);render()});
 }
@@ -99,6 +121,6 @@ A.all('v_screener_base',{order:'fund_id.asc'})
 ]);
 if(!S.bench.some(x=>x.benchmark_code===S.code))S.code='ACWI_IMI';
 fillOptions(E('manager'),S.base.map(x=>x.manager));fillOptions(E('category'),S.base.map(x=>x.category));fillOptions(E('currency'),S.base.map(x=>x.currency));fillOptions(E('risk'),S.base.map(x=>x.risk_class));
-renderStatusSummary();tabs();await loadRelative();render();bind();
+renderStatusSummary();tabs();await Promise.all([loadRelative(),loadRisk()]);render();bind();
 }catch(e){console.error(e);E('err').innerHTML=`<div class="error"><b>Adatbetöltési hiba.</b><br>${A.esc(e.message)}</div>`}
 })();
