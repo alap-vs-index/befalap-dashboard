@@ -1,5 +1,10 @@
 <!doctype html>
-<html lang="hu"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Alap – Befalap Radar</title><link rel="stylesheet" href="styles.css"></head>
+<html lang="hu"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Alap – Befalap Radar</title><link rel="stylesheet" href="styles.css"><style>
+/* Inflation scorecard: four cards should fill the same content width as the other sections. */
+#inflationCards.metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:1050px){#inflationCards.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){#inflationCards.metrics{grid-template-columns:1fr}}
+</style></head>
 <body><header class="top"><div class="shell nav"><a class="brand" href="index.html">Befalap Radar<small>magyar alapok × passzív alternatívák</small></a><nav><a href="index.html">Screener</a><a href="methodology.html">Módszertan</a></nav></div></header>
 <main>
 <section class="shell detail"><a class="textlink" href="index.html">← Screener</a><div id="err"></div><div id="heading"></div><div id="liveNote" class="live-note">—</div></section>
@@ -15,4 +20,4 @@
 <section class="shell section"><div class="head"><div><div class="eyebrow">ÖSSZEHASONLÍTÁS</div><h2>4 passzív alternatíva × 3 tartási idő</h2></div></div><p class="table-unit-note">Egységek: a többlethozam <abbr class="unit-hint" title="százalékpont">pp</abbr>-ben (százalékpontban), a felülteljesítési arány, a relatív lemaradás és a visszaesés %-ban szerepel.</p><div class="tablecard"><div class="scroll"><table><thead><tr><th>Passzív alternatíva</th><th>Tartási idő</th><th class="num">Felülteljesítési arány</th><th class="num">Átlagos éves többlethozam</th><th class="num">Medián éves többlethozam</th><th class="num">Jelenlegi időszak többlethozama</th><th class="num">Vizsgált időszakok</th><th class="num" title="A relatív vagyonpálya korábbi csúcsától mért legnagyobb visszaesése; százalékban.">Legnagyobb relatív lemaradás</th><th class="num">Leghosszabb relatív lemaradási idő</th></tr></thead><tbody id="matrix"></tbody></table></div></div></section>
 <section class="shell section meta" id="meta"></section>
 </main><footer><div class="shell">Múltbeli teljesítmény nem jelzi előre a jövőbeli hozamot. Nem befektetési tanácsadás.</div></footer>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="config.js"></script><script src="js/common.js"></script><script src="js/fund.js"></script><script src="js/risk-horizon.js"></script></body></html>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script><script src="config.js"></script><script src="js/common.js"></script><script src="js/current-track.js"></script><script src="js/gap-chart.js"></script><script src="js/fund.js"></script><script src="js/risk-horizon.js"></script></body></html>
